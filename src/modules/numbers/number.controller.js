@@ -34,7 +34,10 @@ class NumberController {
 
   async reserve(req, res, next) {
     try {
-      const userId = req.user ? req.user.id : (req.body.userId || 1);
+      const userId = req.user ? req.user.id : req.body.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
       const { numberId, gameId, minutes } = req.body;
       const result = await numberService.reserve({
         userId,

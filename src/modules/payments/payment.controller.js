@@ -3,19 +3,26 @@ const paymentService = require('./payment.service');
 class PaymentController {
   async uploadProof(req, res, next) {
     try {
-      const reservationId = Number(req.params.reservationId || req.body.reservationId);
+      const reservationId = Number(
+        req.params.numberId ||
+        req.params.reservationId ||
+        req.body.numberId ||
+        req.body.reservationId
+      );
       if (!reservationId) {
-        return res.status(400).json({ message: 'Reservation ID is required' });
+        return res.status(400).json({ message: 'Reservation/number ID is required' });
       }
 
-      const { provider, transactionReference } = req.body;
-      const userId = req.user ? req.user.id : (req.body.userId || 1);
+      const { provider, transactionReference, proofUrl } = req.body;
+      const userId = req.user ? req.user.id : req.body.userId;
 
       const paymentProof = await paymentService.uploadProof({
         reservationId,
+        numberId: reservationId,
         userId,
         provider,
         transactionReference,
+        proofUrl,
         file: req.file,
       });
 

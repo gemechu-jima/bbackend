@@ -5,7 +5,7 @@ const AuditEvent = require('../audit/audit.model');
 const { sequelize } = require('../../config/database');
 
 class PaymentService {
-  async uploadProof({ reservationId, numberId, userId, provider, transactionReference, file }) {
+  async uploadProof({ reservationId, numberId, userId, provider, transactionReference, proofUrl: providedProofUrl, file }) {
     const targetNumberId = Number(numberId || reservationId);
     if (!targetNumberId) {
       const error = new Error('Number or Reservation ID is required');
@@ -20,9 +20,10 @@ class PaymentService {
       throw error;
     }
 
-    let proofUrl = null;
+    let proofUrl = providedProofUrl || null;
     if (file) {
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      const env = require('../../config/env');
+      const baseUrl = (env.app.baseUrl || process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
       proofUrl = `${baseUrl}/uploads/${file.filename}`;
     }
 
