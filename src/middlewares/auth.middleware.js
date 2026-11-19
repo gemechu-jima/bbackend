@@ -16,6 +16,22 @@ function authenticate(req, res, next) {
   }
 }
 
+function optionalAuthenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_bingo_jwt_key_2026_change_in_production');
+    req.user = decoded;
+  } catch (err) {
+    // Ignore invalid/expired in optional mode
+  }
+  next();
+}
+
 function requireRole(role) {
   return (req, res, next) => {
     if (!req.user) {
@@ -28,5 +44,5 @@ function requireRole(role) {
   };
 }
 
-module.exports = { authenticate, requireRole };
+module.exports = { authenticate, optionalAuthenticate, requireRole };
 

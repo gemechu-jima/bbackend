@@ -95,7 +95,7 @@ async function startServer() {
     app.listen(PORT, HOST, () => {
       console.log(`🚀 Bingo Backend Server running on:`);
       console.log(`   - Local:   http://localhost:${PORT}`);
-      console.log(`   - Network: http://10.34.30.153:${PORT}`);
+      console.log(`   - Network: http://${HOST}:${PORT}`);
       console.log(`📡 Modular API available at:`);
       console.log(`   - Local:   http://localhost:${PORT}/api/`);
       console.log(`   - Network: http://10.34.30.153:${PORT}/api/`);

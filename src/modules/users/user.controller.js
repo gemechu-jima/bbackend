@@ -4,6 +4,7 @@ class UserController {
   async login(req, res, next) {
     try {
       const { phoneNumber } = req.body;
+      console.log(req.body)
       if (!phoneNumber || !phoneNumber.trim()) {
         return res.status(400).json({ message: 'Phone number is required' });
       }
@@ -17,6 +18,7 @@ class UserController {
   async register(req, res, next) {
     try {
       const { firstName, lastName, phoneNumber } = req.body;
+      console.log(req.body)
       if (!phoneNumber || !firstName) {
         return res.status(400).json({ message: 'First name and phone number are required' });
       }

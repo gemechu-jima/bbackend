@@ -1,6 +1,27 @@
 const paymentService = require('./payment.service');
 
 class PaymentController {
+  async checkReference(req, res, next) {
+    try {
+      const reference = req.query.reference || req.query.transactionReference || req.body.reference;
+      const reservationId = req.query.reservationId || req.query.numberId;
+      const gameId = req.query.gameId;
+      const userId = req.user ? req.user.id : (req.query.userId || req.body.userId);
+
+      const result = await paymentService.checkReference({
+        reference,
+        userId,
+        gameId,
+        reservationId,
+        numberId: reservationId,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async uploadProof(req, res, next) {
     try {
       const reservationId = Number(
