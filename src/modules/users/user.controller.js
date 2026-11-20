@@ -3,13 +3,12 @@ const userService = require('./user.service');
 class UserController {
   async login(req, res, next) {
     try {
-      const { phoneNumber } = req.body;
-      console.log(req.body)
+     const { phoneNumber, activationCode } = req.body;
       if (!phoneNumber || !phoneNumber.trim()) {
         return res.status(400).json({ message: 'Phone number is required' });
       }
-      const result = await userService.login(phoneNumber);
-      return res.json(result);
+    const result = await userService.login(phoneNumber, activationCode);
+    return res.status(200).json(result);
     } catch (err) {
       next(err);
     }
@@ -43,6 +42,39 @@ class UserController {
       const users = await userService.getAllUsers();
       return res.json(users);
     } catch (err) {
+      next(err);
+    }
+  }
+  async updateActivation(req, res, next) {
+  try {
+    const isActivated =
+      typeof req.body.isActivated === 'boolean'
+        ? req.body.isActivated
+        : req.body.status === 'ACTIVE';
+
+    const user = await userService.updateActivation(req.params.id, isActivated);
+    return res.status(200).json(user);
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
+    next(err);
+  }
+}
+async updateMe(req, res, next) {
+    try {
+      const result = await userService.updateProfile(req.user.id, {
+        name: req.body.name,
+        phoneNumber: req.body.phoneNumber,
+      });
+      return res.status(200).json(result);
+    } catch (err) {
+      if (err.status) {
+        return res.status(err.status).json({
+          success: false,
+          message: err.message,
+        });
+      }
       next(err);
     }
   }

@@ -6,7 +6,10 @@ const { authenticate, requireRole } = require('../../middlewares/auth.middleware
 router.post('/login', (req, res, next) => userController.login(req, res, next));
 router.post('/register', (req, res, next) => userController.register(req, res, next));
 router.get('/me', authenticate, (req, res, next) => userController.getMe(req, res, next));
+router.patch('/me', authenticate, (req, res, next) => userController.updateMe(req, res, next));
 router.get('/', authenticate, requireRole('ADMIN'), (req, res, next) => userController.getAll(req, res, next));
-
+router.patch('/:id/activation', authenticate, requireRole('ADMIN'), (req, res, next) =>
+  userController.updateActivation(req, res, next)
+);
 module.exports = router;
 

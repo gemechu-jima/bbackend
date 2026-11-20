@@ -25,6 +25,14 @@ const User = sequelize.define('User', {
     defaultValue: 'PLAYER',
     allowNull: false,
   },
+  activationCode: {
+    type: DataTypes.STRING(6),
+    allowNull: true,
+  },
+  isActivated: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
   password: {
     type: DataTypes.STRING(255),
     allowNull: true,
