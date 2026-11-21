@@ -25,9 +25,9 @@ class GameService {
       const count = Number(data.totalNumbers) || 50;
 
       const game = await Game.create({
-        title: data.title || 'Bingo Game',
+        title: data.title || 'Lucky Game',
         totalNumbers: count,
-        reservationMinutes: Number(data.reservationMinutes) || 5,
+        reservationMinutes: Number(data.reservationMinutes) || 10,
         numberPrice: Number(data.numberPrice) || 100.0,
         prizeDistribution: data.prizeDistribution || { first: 60, second: 20, third: 10, fourth: 0, system: 10 },
         createdBy: creatorId || 1,

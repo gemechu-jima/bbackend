@@ -22,6 +22,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 const imagekit = new ImageKit({
@@ -31,11 +32,17 @@ const imagekit = new ImageKit({
 });
 // Serve uploaded payment screenshots statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-app.get('/api/imagekit-auth', (_req, res) => {
-  // Generates { token, expire, signature }
-  const authParams = imagekit.getAuthenticationParameters();
-  res.json(authParams);
-});
+// ImageKit authentication endpoint for client-side uploads
+const handleImageKitAuth = (req, res) => {
+  try {
+    const authParams = imagekit.getAuthenticationParameters();
+    return res.status(200).json(authParams);
+  } catch (err) {
+    return res.status(500).json({ message: 'ImageKit auth failed', error: err.message });
+  }
+};
+app.get('/api/imagekit-auth', handleImageKitAuth);
+app.get('/api/v1/imagekit-auth', handleImageKitAuth);
 // Health check
 app.get('/health', (req, res) => {
   res.json({

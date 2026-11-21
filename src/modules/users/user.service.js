@@ -210,6 +210,45 @@ async updateProfile(userId, { name, phoneNumber }) {
 
     return this.formatUserResponse(user);
   }
+  async updateUserByAdmin(userId, { firstName, lastName, phoneNumber }) {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    const err = new Error('Player not found.');
+    err.status = 404;
+    throw err;
+  }
+  await user.update({
+    firstName: firstName?.trim() || user.firstName,
+    lastName: lastName?.trim() || user.lastName,
+    phoneNumber: phoneNumber?.trim() || user.phoneNumber,
+  });
+  return user;
+}
+
+async deleteUser(userId) {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    const err = new Error('Player not found.');
+    err.status = 404;
+    throw err;
+  }
+  await user.destroy();
+  return true;
+}
+async toggleActivation(userId, isActivated) {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    const err = new Error('Player not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  const nextState =
+    typeof isActivated === 'boolean' ? isActivated : !user.isActivated;
+
+  await user.update({ isActivated: nextState });
+  return user;
+}
 }
 
 module.exports = new UserService();

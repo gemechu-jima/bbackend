@@ -1,11 +1,16 @@
 const { Op } = require('sequelize');
 const PaymentProof = require('./payment.model');
 const GameNumber = require('../numbers/number.model');
+const User = require('../users/user.model');
+const Game = require('../games/game.model');
 const AuditEvent = require('../audit/audit.model');
 const { sequelize } = require('../../config/database');
 const { detectPaymentProvider } = require('../../utils/paymentDetector');
 
 class PaymentService {
+  /**
+   * Check if a transaction reference number is unique and auto-detect provider
+   */
   async checkReference({ reference, userId, gameId, reservationId, numberId }) {
     if (!reference || typeof reference !== 'string' || !reference.trim()) {
       return {
@@ -43,7 +48,7 @@ class PaymentService {
       };
     }
 
-    if (existing.status === 'UNDER_REVIEW') {
+    if (existing.status === 'UNDER_REVIEW' || existing.status === 'SUBMITTED') {
       const targetId = Number(numberId || reservationId);
       const isSameUser = userId && Number(existing.userId) === Number(userId);
       const isSameGame = gameId && Number(existing.gameId) === Number(gameId);
@@ -88,7 +93,10 @@ class PaymentService {
     };
   }
 
-  async uploadProof({ reservationId, numberId, userId, provider, transactionReference, proofUrl: providedProofUrl, file }) {
+  /**
+   * Upload / submit payment proof for a reservation or game number
+   */
+  async uploadProof({ reservationId, numberId, userId, provider, paymentMethod, transactionReference, referenceNumber, proofUrl: providedProofUrl, file, amount }) {
     const targetNumberId = Number(numberId || reservationId);
     if (!targetNumberId) {
       const error = new Error('Number or Reservation ID is required');
@@ -96,7 +104,7 @@ class PaymentService {
       throw error;
     }
 
-    const cleanRef = transactionReference ? String(transactionReference).trim() : null;
+    const cleanRef = (transactionReference || referenceNumber) ? String(transactionReference || referenceNumber).trim() : null;
     if (!cleanRef) {
       const error = new Error('Transaction reference number is required');
       error.status = 400;
@@ -113,13 +121,13 @@ class PaymentService {
     const targetUserId = gameNumber.userId || userId;
     const targetGameId = gameNumber.gameId;
     const autoDetectedProvider = detectPaymentProvider(cleanRef);
-    const resolvedProvider = provider || autoDetectedProvider || 'CBE';
+    const resolvedProvider = provider || paymentMethod || autoDetectedProvider || 'CBE';
 
     // Enforce uniqueness: Check if reference already exists in VERIFIED or UNDER_REVIEW
     const existing = await PaymentProof.findOne({
       where: {
         transactionReference: { [Op.like]: cleanRef },
-        status: { [Op.in]: ['VERIFIED', 'UNDER_REVIEW'] },
+        status: { [Op.in]: ['VERIFIED', 'UNDER_REVIEW', 'SUBMITTED'] },
       },
       order: [['createdAt', 'DESC']],
     });
@@ -137,8 +145,9 @@ class PaymentService {
       }
     }
 
+    // Prefer permanent cloud storage URL (e.g. ImageKit) if provided; fallback to local disk upload
     let proofUrl = providedProofUrl || null;
-    if (file) {
+    if (!proofUrl && file) {
       const env = require('../../config/env');
       const baseUrl = (env.app.baseUrl || process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
       proofUrl = `${baseUrl}/uploads/${file.filename}`;
@@ -149,7 +158,7 @@ class PaymentService {
       reservationId: targetNumberId,
       userId: targetUserId,
       gameId: targetGameId,
-      amount: 100.00,
+      amount: Number(amount) || 100.00,
       provider: resolvedProvider,
       transactionReference: cleanRef,
       proofUrl,
@@ -157,8 +166,42 @@ class PaymentService {
     });
   }
 
+  /**
+   * Submit payment (supports single or multi number submission)
+   */
+  async submitPayment(data) {
+    const { numbers, reservationId, numberId } = data;
+    const targetId = numberId || reservationId || (Array.isArray(numbers) ? numbers[0] : null);
+
+    return await this.uploadProof({
+      ...data,
+      numberId: targetId,
+      reservationId: targetId,
+    });
+  }
+
   async getAll() {
     return await PaymentProof.findAll({
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'phoneNumber'], required: false },
+        { model: Game, as: 'game', attributes: ['id', 'title', 'numberPrice'], required: false },
+        { model: GameNumber, as: 'number', attributes: ['id', 'number', 'status'], required: false },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+  }
+
+  async getAllPayments() {
+    return await this.getAll();
+  }
+
+  async getUserPayments(userId) {
+    return await PaymentProof.findAll({
+      where: { userId },
+      include: [
+        { model: Game, as: 'game', attributes: ['id', 'title', 'numberPrice'], required: false },
+        { model: GameNumber, as: 'number', attributes: ['id', 'number', 'status'], required: false },
+      ],
       order: [['createdAt', 'DESC']],
     });
   }
@@ -169,6 +212,10 @@ class PaymentService {
       where: {
         [Op.or]: [{ reservationId: id }, { numberId: id }],
       },
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'phoneNumber'], required: false },
+        { model: Game, as: 'game', attributes: ['id', 'title', 'numberPrice'], required: false },
+      ],
     });
   }
 
@@ -201,6 +248,18 @@ class PaymentService {
     } catch (err) {
       await t.rollback();
       throw err;
+    }
+  }
+
+  async verifyPayment(paymentId, status, adminId, reason = null) {
+    if (status === 'APPROVED' || status === 'VERIFIED') {
+      return await this.verify(paymentId, adminId);
+    } else if (status === 'REJECTED') {
+      return await this.reject(paymentId, reason, adminId);
+    } else {
+      const error = new Error(`Unsupported payment status: ${status}`);
+      error.status = 400;
+      throw error;
     }
   }
 

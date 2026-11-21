@@ -11,5 +11,14 @@ router.get('/', authenticate, requireRole('ADMIN'), (req, res, next) => userCont
 router.patch('/:id/activation', authenticate, requireRole('ADMIN'), (req, res, next) =>
   userController.updateActivation(req, res, next)
 );
+router.patch('/:id', authenticate, requireRole('ADMIN'), (req, res, next) =>
+  userController.updateUserByAdmin(req, res, next)
+);
+router.delete('/:id', authenticate, requireRole('ADMIN'), (req, res, next) =>
+  userController.deleteUser(req, res, next)
+);
+router.patch('/:id/toggle-activation', authenticate, requireRole('ADMIN'), (req, res, next) =>
+  userController.toggleActivation(req, res, next)
+);
 module.exports = router;
 

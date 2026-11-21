@@ -82,7 +82,7 @@ class NumberService {
   async reserve({ userId, numberId, gameId, minutes }) {
     const t = await sequelize.transaction();
     try {
-      const holdMinutes = Number(minutes) || 5;
+      const holdMinutes = Number(minutes) || 10;
 
       const game = await Game.findByPk(gameId, { transaction: t });
       if (!game) {
@@ -249,7 +249,7 @@ class NumberService {
     }
 
     gameNumber.status = 'RESERVED';
-    gameNumber.expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    gameNumber.expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await gameNumber.save();
 
     return formatNumberItem(gameNumber);

@@ -78,6 +78,37 @@ async updateMe(req, res, next) {
       next(err);
     }
   }
+  async updateUserByAdmin(req, res, next) {
+  try {
+    const updated = await userService.updateUserByAdmin(req.params.id, req.body);
+    return res.status(200).json(updated);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    next(err);
+  }
+}
+
+async deleteUser(req, res, next) {
+  try {
+    await userService.deleteUser(req.params.id);
+    return res.status(200).json({ success: true, message: 'Player deleted.' });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    next(err);
+  }
+}
+async toggleActivation(req, res, next) {
+  try {
+    const updated = await userService.toggleActivation(
+      req.params.id,
+      req.body.isActivated
+    );
+    return res.status(200).json(updated);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    next(err);
+  }
+}
 }
 
 module.exports = new UserController();
