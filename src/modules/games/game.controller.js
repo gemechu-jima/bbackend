@@ -55,7 +55,22 @@ class GameController {
       next(err);
     }
   }
-
+  async pending(req, res, next) {
+    try {
+      const game = await gameService.pending(req.params.id);
+      return res.json(game);
+    } catch (err) {
+      next(err);
+    }
+  }
+  async drawing(req, res, next) {
+    try {
+      const game = await gameService.drawing(req.params.id);
+      return res.json(game);
+    } catch (err) {
+      next(err);
+    }
+  }
   async delete(req, res, next) {
     try {
       const result = await gameService.delete(req.params.id);
