@@ -57,17 +57,34 @@ class DrawService {
       const ticketPrice = Number(game.numberPrice) || 100;
       const totalPrizePool = confirmedNumbers.length * ticketPrice;
 
-      const shares = game.prizeDistribution || { first: 60, second: 20, third: 10, fourth: 0, system: 10 };
-      const prizePercentages = [shares.first || 60, shares.second || 20, shares.third || 10];
+      const rawShares = typeof game.prizeDistribution === 'string'
+        ? JSON.parse(game.prizeDistribution)
+        : (game.prizeDistribution || { first: 60, second: 20, third: 10, fourth: 0, system: 10 });
+
+      // Dynamically extract prize tiers that are > 0 (supports 1st, 2nd, 3rd, and 4th place)
+      const prizeTiers = [];
+      if (Number(rawShares.first) > 0) prizeTiers.push({ place: 1, name: '1st Place', pct: Number(rawShares.first) });
+      if (Number(rawShares.second) > 0) prizeTiers.push({ place: 2, name: '2nd Place', pct: Number(rawShares.second) });
+      if (Number(rawShares.third) > 0) prizeTiers.push({ place: 3, name: '3rd Place', pct: Number(rawShares.third) });
+      if (Number(rawShares.fourth) > 0) prizeTiers.push({ place: 4, name: '4th Place', pct: Number(rawShares.fourth) });
+
+      if (prizeTiers.length === 0) {
+        prizeTiers.push(
+          { place: 1, name: '1st Place', pct: 60 },
+          { place: 2, name: '2nd Place', pct: 20 },
+          { place: 3, name: '3rd Place', pct: 10 }
+        );
+      }
 
       // Shuffle and pick winners
       const shuffled = shuffle(confirmedNumbers);
-      const winnersCount = Math.min(shuffled.length, prizePercentages.length);
+      const winnersCount = Math.min(shuffled.length, prizeTiers.length);
       const winners = [];
 
-      for (let place = 1; place <= winnersCount; place++) {
-        const winnerNum = shuffled[place - 1];
-        const pct = prizePercentages[place - 1] / 100;
+      for (let i = 0; i < winnersCount; i++) {
+        const tier = prizeTiers[i];
+        const winnerNum = shuffled[i];
+        const pct = tier.pct / 100;
         const prizeAmount = Math.round(totalPrizePool * pct);
 
         const displayName = winnerNum.user
@@ -75,7 +92,9 @@ class DrawService {
           : `Player #${winnerNum.userId}`;
 
         winners.push({
-          place,
+          place: tier.place,
+          tierName: tier.name,
+          pct: tier.pct,
           reservationId: winnerNum.id, // For mobile app compatibility
           numberId: winnerNum.id,
           number: winnerNum.number,
