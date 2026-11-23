@@ -6,6 +6,7 @@ const GameNumber = require('./numbers/number.model');
 const PaymentProof = require('./payments/payment.model');
 const Draw = require('./draws/draw.model');
 const AuditEvent = require('./audit/audit.model');
+const Notification = require('./notifications/notification.model');
 
 // Associations
 // Game <-> GameNumbers
@@ -36,6 +37,10 @@ PaymentProof.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 Game.hasMany(PaymentProof, { foreignKey: 'gameId', as: 'paymentProofs' });
 PaymentProof.belongsTo(Game, { foreignKey: 'gameId', as: 'game' });
 
+// User <-> Notifications
+User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications', onDelete: 'CASCADE' });
+Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
 // Game <-> Draws
 Game.hasMany(Draw, { foreignKey: 'gameId', as: 'draws' });
 Draw.belongsTo(Game, { foreignKey: 'gameId', as: 'game' });
@@ -49,4 +54,5 @@ module.exports = {
   PaymentProof,
   Draw,
   AuditEvent,
+  Notification,
 };

@@ -20,6 +20,15 @@ class DrawController {
     }
   }
 
+  async getDrawHistory(req, res, next) {
+    try {
+      const history = await drawService.getDrawHistory();
+      return res.json(history);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async resetGame(req, res, next) {
     try {
       const result = await drawService.resetGame(req.params.gameId);

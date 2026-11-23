@@ -153,7 +153,7 @@ class PaymentService {
       proofUrl = `${baseUrl}/uploads/${file.filename}`;
     }
 
-    return await PaymentProof.create({
+    const createdProof = await PaymentProof.create({
       numberId: targetNumberId,
       reservationId: targetNumberId,
       userId: targetUserId,
@@ -164,6 +164,21 @@ class PaymentService {
       proofUrl,
       status: 'UNDER_REVIEW',
     });
+
+    try {
+      const notificationService = require('../notifications/notification.service');
+      await notificationService.createNotification({
+        userId: targetUserId,
+        title: 'Payment Submitted',
+        message: `Your payment proof for number #${gameNumber.number} has been submitted and is under admin review.`,
+        type: 'PAYMENT',
+        metadata: { numberId: targetNumberId, gameId: targetGameId, proofId: createdProof.id },
+      });
+    } catch (e) {
+      console.error('Error creating payment notification:', e.message);
+    }
+
+    return createdProof;
   }
 
   /**
@@ -244,6 +259,22 @@ class PaymentService {
       }
 
       await t.commit();
+
+      try {
+        const notificationService = require('../notifications/notification.service');
+        const gNum = targetId ? await GameNumber.findByPk(targetId) : null;
+        const numDisplay = gNum ? `#${gNum.number}` : `#${targetId}`;
+        await notificationService.createNotification({
+          userId: proof.userId,
+          title: '✅ Payment Confirmed',
+          message: `Your payment for number ${numDisplay} has been confirmed. You are officially entered into the draw!`,
+          type: 'PAYMENT',
+          metadata: { numberId: targetId, proofId: proof.id },
+        });
+      } catch (notifErr) {
+        console.error('Error sending payment confirm notification:', notifErr.message);
+      }
+
       return proof;
     } catch (err) {
       await t.rollback();
@@ -289,6 +320,22 @@ class PaymentService {
       }
 
       await t.commit();
+
+      try {
+        const notificationService = require('../notifications/notification.service');
+        const gNum = targetId ? await GameNumber.findByPk(targetId) : null;
+        const numDisplay = gNum ? `#${gNum.number}` : `#${targetId}`;
+        await notificationService.createNotification({
+          userId: proof.userId,
+          title: '❌ Payment Proof Rejected',
+          message: `Your payment for number ${numDisplay} was rejected: ${note || 'Invalid payment receipt'}. The number has been released back to available.`,
+          type: 'PAYMENT',
+          metadata: { numberId: targetId, proofId: proof.id },
+        });
+      } catch (notifErr) {
+        console.error('Error sending payment reject notification:', notifErr.message);
+      }
+
       return proof;
     } catch (err) {
       await t.rollback();

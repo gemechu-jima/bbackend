@@ -98,6 +98,7 @@ class DrawService {
           reservationId: winnerNum.id, // For mobile app compatibility
           numberId: winnerNum.id,
           number: winnerNum.number,
+          userId: winnerNum.userId,
           displayName,
           prizeAmount,
         });
@@ -115,6 +116,30 @@ class DrawService {
       await game.save({ transaction: t });
 
       await t.commit();
+
+      // Send win notifications to winning players asynchronously
+      try {
+        const notificationService = require('../notifications/notification.service');
+        for (const w of winners) {
+          if (w.userId) {
+            await notificationService.createNotification({
+              userId: w.userId,
+              title: `🎉 Congratulations! You Won ${w.tierName || `#${w.place}`}!`,
+              message: `Your lucky number #${w.number} won ${w.tierName || `#${w.place}`} in "${game.title}"! Prize: ${w.prizeAmount} ETB (${w.pct}% of pool).`,
+              type: 'WIN',
+              metadata: {
+                drawId: draw.id,
+                gameId: draw.gameId,
+                number: w.number,
+                place: w.place,
+                prizeAmount: w.prizeAmount,
+              },
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error('Error sending win notifications:', notifErr.message);
+      }
 
       return {
         id: draw.id,
@@ -142,6 +167,35 @@ class DrawService {
       winners: r.winners,
       createdAt: r.createdAt.toISOString(),
     }));
+  }
+
+  async getDrawHistory() {
+    const results = await Draw.findAll({
+      include: [
+        {
+          model: Game,
+          as: 'game',
+          attributes: ['id', 'title', 'totalNumbers', 'numberPrice', 'prizeDistribution', 'status'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    return results.map((r) => {
+      const winners = r.winners || [];
+      const totalPrize = winners.reduce((sum, w) => sum + (Number(w.prizeAmount) || 0), 0);
+      return {
+        id: r.id,
+        gameId: r.gameId,
+        gameTitle: r.game ? r.game.title : `Game #${r.gameId}`,
+        gameTotalNumbers: r.game ? r.game.totalNumbers : null,
+        numberPrice: r.game ? r.game.numberPrice : null,
+        status: r.status,
+        winners,
+        totalPrize,
+        createdAt: r.createdAt.toISOString(),
+      };
+    });
   }
 
   async resetGame(gameId) {

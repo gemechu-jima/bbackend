@@ -11,6 +11,7 @@ const gameRouter = require('./modules/games/game.router');
 const numberRouter = require('./modules/numbers/number.router');
 const paymentRouter = require('./modules/payments/payment.router');
 const drawRouter = require('./modules/draws/draw.router');
+const notificationRouter = require('./modules/notifications/notification.router');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,6 +60,7 @@ function registerRoutes(prefix) {
   app.use(`${prefix}/numbers`, numberRouter);
   app.use(`${prefix}/payments`, paymentRouter);
   app.use(`${prefix}/draws`, drawRouter);
+  app.use(`${prefix}/notifications`, notificationRouter);
 }
 
 // Mount on /api and /api/v1
