@@ -47,7 +47,6 @@ class GameService {
 
   async activate(id) {
     const game = await this.getById(id);
-    // Re-seed numbers if needed; createdById is unknown at activation time
     await numberService.seedNumbersForGame(game.id, game.totalNumbers, null, null);
     game.status = 'ACTIVE';
     await game.save();
@@ -64,6 +63,19 @@ class GameService {
   async cancel(id) {
     const game = await this.getById(id);
     game.status = 'CANCELLED';
+    await game.save();
+    return game;
+  }
+
+  async drawing(id) {
+    const game = await this.getById(id);
+    game.status = 'DRAWING';
+    await game.save();
+    return game;
+  }
+  async pending(id) {
+    const game = await this.getById(id);
+    game.status = 'PENDING';
     await game.save();
     return game;
   }
