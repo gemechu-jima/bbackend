@@ -1,13 +1,16 @@
+const crypto = require('crypto');
 const Draw = require('./draw.model');
 const Game = require('../games/game.model');
 const User = require('../users/user.model');
 const GameNumber = require('../numbers/number.model');
 const { sequelize } = require('../../config/database');
-
+// Add at the top of src/modules/draws/draw.service.js:
+const Notification = require('../notifications/notification.model');
+// Cryptographically secure Fisher-Yates shuffle
 function shuffle(array) {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = crypto.randomInt(0, i + 1);
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
@@ -15,9 +18,13 @@ function shuffle(array) {
 
 class DrawService {
   async drawNow(gameId, adminId = 1) {
+    const numericGameId = Number(gameId);
     const t = await sequelize.transaction();
+
+    let committedData;
+
     try {
-      const game = await Game.findByPk(gameId, { transaction: t });
+      const game = await Game.findByPk(numericGameId, { transaction: t });
       if (!game) {
         const error = new Error('Game not found');
         error.status = 404;
@@ -30,17 +37,23 @@ class DrawService {
         throw error;
       }
 
-      // Check if official draw already exists
-      const existingDraw = await Draw.findOne({ where: { gameId }, transaction: t });
+      const existingDraw = await Draw.findOne({
+        where: { gameId: numericGameId },
+        transaction: t,
+      });
       if (existingDraw) {
         const error = new Error('This game has already been drawn. Official results are already saved.');
         error.status = 409;
         throw error;
       }
 
-      // Fetch ONLY confirmed numbers
+      const totalCount = await GameNumber.count({
+        where: { gameId: numericGameId },
+        transaction: t,
+      });
+
       const confirmedNumbers = await GameNumber.findAll({
-        where: { gameId, status: 'CONFIRMED' },
+        where: { gameId: numericGameId, status: 'CONFIRMED' },
         include: [
           { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'phoneNumber'] },
         ],
@@ -48,20 +61,28 @@ class DrawService {
       });
 
       if (confirmedNumbers.length === 0) {
-        const error = new Error('Cannot draw: there are no eligible confirmed numbers for this game.');
+        const error = new Error('Cannot draw: there are no confirmed numbers for this game.');
         error.status = 400;
         throw error;
       }
 
-      // Calculate total pool based on confirmed tickets * price
-      const ticketPrice = Number(game.numberPrice) || 100;
+      // If you strictly require ALL numbers to be sold before drawing, keep this check with a clear message:
+      if (totalCount > 0 && confirmedNumbers.length !== totalCount) {
+        const error = new Error(
+          `Cannot draw yet: only ${confirmedNumbers.length} of ${totalCount} numbers are confirmed.`
+        );
+        error.status = 400;
+        throw error;
+      }
+
+      const ticketPrice = Number(game.numberPrice);
       const totalPrizePool = confirmedNumbers.length * ticketPrice;
 
-      const rawShares = typeof game.prizeDistribution === 'string'
-        ? JSON.parse(game.prizeDistribution)
-        : (game.prizeDistribution || { first: 60, second: 20, third: 10, fourth: 0, system: 10 });
+      const rawShares =
+        typeof game.prizeDistribution === 'string'
+          ? JSON.parse(game.prizeDistribution)
+          : game.prizeDistribution || { first: 60, second: 20, third: 10, fourth: 0, system: 10 };
 
-      // Dynamically extract prize tiers that are > 0 (supports 1st, 2nd, 3rd, and 4th place)
       const prizeTiers = [];
       if (Number(rawShares.first) > 0) prizeTiers.push({ place: 1, name: '1st Place', pct: Number(rawShares.first) });
       if (Number(rawShares.second) > 0) prizeTiers.push({ place: 2, name: '2nd Place', pct: Number(rawShares.second) });
@@ -76,7 +97,6 @@ class DrawService {
         );
       }
 
-      // Shuffle and pick winners
       const shuffled = shuffle(confirmedNumbers);
       const winnersCount = Math.min(shuffled.length, prizeTiers.length);
       const winners = [];
@@ -84,8 +104,7 @@ class DrawService {
       for (let i = 0; i < winnersCount; i++) {
         const tier = prizeTiers[i];
         const winnerNum = shuffled[i];
-        const pct = tier.pct / 100;
-        const prizeAmount = Math.round(totalPrizePool * pct);
+        const prizeAmount = Math.round(totalPrizePool * (tier.pct / 100));
 
         const displayName = winnerNum.user
           ? `${winnerNum.user.firstName || ''} ${winnerNum.user.lastName ? winnerNum.user.lastName.charAt(0) + '.' : ''}`.trim()
@@ -95,7 +114,7 @@ class DrawService {
           place: tier.place,
           tierName: tier.name,
           pct: tier.pct,
-          reservationId: winnerNum.id, // For mobile app compatibility
+          reservationId: winnerNum.id,
           numberId: winnerNum.id,
           number: winnerNum.number,
           userId: winnerNum.userId,
@@ -104,54 +123,67 @@ class DrawService {
         });
       }
 
-      const draw = await Draw.create({
-        gameId,
-        status: 'COMPLETED',
-        winners,
-        drawnBy: adminId,
-      }, { transaction: t });
+      const draw = await Draw.create(
+        {
+          gameId: numericGameId,
+          status: 'COMPLETED',
+          winners,
+          drawnBy: adminId,
+        },
+        { transaction: t }
+      );
 
-      // Mark game as COMPLETED
       game.status = 'COMPLETED';
       await game.save({ transaction: t });
 
       await t.commit();
 
-      // Send win notifications to winning players asynchronously
-      try {
-        const notificationService = require('../notifications/notification.service');
-        for (const w of winners) {
-          if (w.userId) {
-            await notificationService.createNotification({
-              userId: w.userId,
-              title: `🎉 Congratulations! You Won ${w.tierName || `#${w.place}`}!`,
-              message: `Your lucky number #${w.number} won ${w.tierName || `#${w.place}`} in "${game.title}"! Prize: ${w.prizeAmount} ETB (${w.pct}% of pool).`,
-              type: 'WIN',
-              metadata: {
-                drawId: draw.id,
-                gameId: draw.gameId,
-                number: w.number,
-                place: w.place,
-                prizeAmount: w.prizeAmount,
-              },
-            });
-          }
-        }
-      } catch (notifErr) {
-        console.error('Error sending win notifications:', notifErr.message);
-      }
-
-      return {
+      committedData = {
         id: draw.id,
         gameId: draw.gameId,
+        gameTitle: game.title,
         status: draw.status,
-        winners: draw.winners,
-        createdAt: draw.createdAt.toISOString(),
+        winners,
+        createdAt: draw.createdAt ? new Date(draw.createdAt).toISOString() : new Date().toISOString(),
       };
     } catch (err) {
-      await t.rollback();
+      if (!t.finished) {
+        await t.rollback();
+      }
       throw err;
     }
+
+    // Post-commit notifications (never triggers transaction rollback)
+    try {
+      const notificationService = require('../notifications/notification.service');
+      for (const w of committedData.winners) {
+        if (w.userId) {
+          await notificationService.createNotification({
+            userId: w.userId,
+            title: `🎉 Congratulations! You Won ${w.tierName || `#${w.place}`}!`,
+            message: `Your lucky number #${w.number} won ${w.tierName || `#${w.place}`} in "${committedData.gameTitle}"! Prize: ${w.prizeAmount} ETB (${w.pct}% of pool).`,
+            type: 'WIN',
+            metadata: {
+              drawId: committedData.id,
+              gameId: committedData.gameId,
+              number: w.number,
+              place: w.place,
+              prizeAmount: w.prizeAmount,
+            },
+          });
+        }
+      }
+    } catch (notifErr) {
+      console.error('Error sending win notifications:', notifErr.message);
+    }
+
+    return {
+      id: committedData.id,
+      gameId: committedData.gameId,
+      status: committedData.status,
+      winners: committedData.winners,
+      createdAt: committedData.createdAt,
+    };
   }
 
   async getResults(gameId) {
@@ -199,9 +231,51 @@ class DrawService {
   }
 
   async resetGame(gameId) {
-    await Draw.destroy({ where: { gameId: Number(gameId) } });
-    await Game.update({ status: 'ACTIVE' }, { where: { id: Number(gameId) } });
-    return { message: 'Game draw reset successfully.' };
+    const numericGameId = Number(gameId);
+    const t = await sequelize.transaction();
+
+    try {
+      // 1. Find WIN notifications for this game and delete them
+      const winNotifications = await Notification.findAll({
+        where: { type: 'WIN' },
+        transaction: t,
+      });
+
+      const idsToDelete = winNotifications
+        .filter((n) => {
+          const meta =
+            typeof n.metadata === 'string' ? JSON.parse(n.metadata) : n.metadata;
+          return Number(meta?.gameId) === numericGameId;
+        })
+        .map((n) => n.id);
+
+      if (idsToDelete.length > 0) {
+        await Notification.destroy({
+          where: { id: idsToDelete },
+          transaction: t,
+        });
+      }
+
+      // 2. Delete the draw record and reopen the game
+      await Draw.destroy({
+        where: { gameId: numericGameId },
+        transaction: t,
+      });
+
+      await Game.update(
+        { status: 'ACTIVE' },
+        { where: { id: numericGameId }, transaction: t }
+      );
+
+      await t.commit();
+      return {
+        message: 'Game draw and win notifications reset successfully.',
+        deletedNotifications: idsToDelete.length,
+      };
+    } catch (err) {
+      if (!t.finished) await t.rollback();
+      throw err;
+    }
   }
 }
 

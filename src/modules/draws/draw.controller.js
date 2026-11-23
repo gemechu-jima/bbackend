@@ -3,6 +3,7 @@ const drawService = require('./draw.service');
 class DrawController {
   async drawNow(req, res, next) {
     try {
+      console.log("user", req.user.id)
       const adminId = req.user ? req.user.id : 1;
       const result = await drawService.drawNow(req.params.gameId, adminId);
       return res.status(201).json(result);
