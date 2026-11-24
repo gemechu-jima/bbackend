@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('./user.model');
-
+const {sendAfroSMS}= require("../../utils/smsService")
 class UserService {
   generateToken(user) {
     return jwt.sign(
@@ -44,15 +44,22 @@ class UserService {
     console.log(cleanCode)
     let user = await User.findOne({ where: { phoneNumber: cleanPhone } });
 
-    if (!user) {
-      // Auto-create for demo/testing friendliness
-      const isAdminPhone = cleanPhone === '0911000000' || cleanPhone === '+251911000000' || cleanPhone.toLowerCase() === 'admin';
-      user = await User.create({
-        firstName: isAdminPhone ? 'Admin' : 'Player',
-        lastName: 'User',
-        phoneNumber: cleanPhone,
-        role: isAdminPhone ? 'ADMIN' : 'PLAYER',
-      });
+ if (!user) {
+      const userCount = await User.count();
+      // Bootstrap initial Admin ONLY when the users table is completely empty
+      if (userCount === 0) {
+        user = await User.create({
+          firstName: 'Admin',
+          lastName: 'User',
+          phoneNumber: cleanPhone,
+          role: 'ADMIN',
+          isActivated: true,
+        });
+      } else {
+        const error = new Error('Account not found. Please register first.');
+        error.status = 404;
+        throw error;
+      }
     }
      // FIRST-TIME LOGIN: Account is not activated yet
     if (!user.isActivated) {
@@ -249,6 +256,50 @@ async toggleActivation(userId, isActivated) {
   await user.update({ isActivated: nextState });
   return user;
 }
+
+// Add inside UserService class right below register():
+  async registerAndSendCode({ firstName, lastName, phoneNumber }) {
+    const cleanPhone = phoneNumber.trim();
+    const existing = await User.findOne({ where: { phoneNumber: cleanPhone } });
+
+    if (existing) {
+      const error = new Error('Phone number already registered. Please log in.');
+      error.status = 409;
+      throw error;
+    }
+
+    const code = await this.generateUniqueActivationCode();
+
+    const user = await User.create({
+      firstName: firstName.trim(),
+      lastName: lastName ? lastName.trim() : '',
+      phoneNumber: cleanPhone,
+      role: 'PLAYER',
+      isActivated: false,
+      activationCode: code,
+    });
+
+    // Send the generated activationCode automatically via AfroMessage SMS
+    await sendAfroSMS(
+      cleanPhone,
+      `Your activation code is ${code}. Enter this code when logging in.`
+    );
+
+    const token = this.generateToken(user);
+    const fullName = `${user.firstName} ${user.lastName || ''}`.trim();
+
+    return {
+      token,
+      user: {
+        id: String(user.id),
+        name: fullName,
+        phone: user.phoneNumber,
+        role: user.role,
+      },
+      message: 'Registration successful. Activation code sent to your phone via SMS.',
+      success: true,
+    };
+  }
 }
 
 module.exports = new UserService();

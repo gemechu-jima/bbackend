@@ -109,6 +109,23 @@ async toggleActivation(req, res, next) {
     next(err);
   }
 }
+async registerAndSendCode(req, res, next) {
+    try {
+      const { firstName, lastName, phoneNumber } = req.body;
+      if (!phoneNumber || !firstName) {
+        return res.status(400).json({ message: 'First name and phone number are required' });
+      }
+      const result = await userService.registerAndSendCode({
+        firstName,
+        lastName,
+        phoneNumber,
+      });
+      return res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
 }
 
 module.exports = new UserController();

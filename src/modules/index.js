@@ -7,6 +7,7 @@ const PaymentProof = require('./payments/payment.model');
 const Draw = require('./draws/draw.model');
 const AuditEvent = require('./audit/audit.model');
 const Notification = require('./notifications/notification.model');
+const Setting = require('./setting/setting.model');
 
 // Associations
 // Game <-> GameNumbers
@@ -55,4 +56,5 @@ module.exports = {
   Draw,
   AuditEvent,
   Notification,
+  Setting,
 };

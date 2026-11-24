@@ -1,4 +1,6 @@
 const Game = require('./game.model');
+const GameNumber = require('../numbers/number.model');
+const Draw = require('../draws/draw.model');
 const numberService = require('../numbers/number.service');
 const { sequelize } = require('../../config/database');
 
@@ -85,6 +87,75 @@ class GameService {
     await game.destroy();
     return { message: 'Game deleted successfully' };
   }
+  // Add these two methods inside your GameService class:
+async updateGame(gameId, payload) {
+  const game = await Game.findByPk(gameId);
+  if (!game) {
+    const err = new Error('Game not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  const updates = {};
+  if (payload.title !== undefined && String(payload.title).trim()) {
+    updates.title = String(payload.title).trim();
+  }
+  if (payload.numberPrice !== undefined && Number(payload.numberPrice) > 0) {
+    updates.numberPrice = Number(payload.numberPrice);
+  }
+  if (payload.reservationMinutes !== undefined && Number(payload.reservationMinutes) >= 1) {
+    updates.reservationMinutes = Math.round(Number(payload.reservationMinutes));
+  }
+  if (payload.status !== undefined) {
+    updates.status = payload.status;
+  }
+  if (payload.prizeDistribution !== undefined) {
+    updates.prizeDistribution = payload.prizeDistribution;
+  }
+
+  await game.update(updates);
+  await game.reload();
+  return game;
+}
+
+async deleteGame(gameId) {
+  const numericId = Number(gameId);
+  const t = await sequelize.transaction();
+
+  try {
+    const game = await Game.findByPk(numericId, { transaction: t });
+    if (!game) {
+      const err = new Error('Game not found.');
+      err.status = 404;
+      throw err;
+    }
+
+    // Prevent accidental deletion if players already confirmed payments unless forced
+    const confirmedCount = await GameNumber.count({
+      where: { gameId: numericId, status: 'CONFIRMED' },
+      transaction: t,
+    });
+
+    if (confirmedCount > 0 && game.status === 'ACTIVE') {
+      const err = new Error(
+        `Cannot delete an ACTIVE game with ${confirmedCount} confirmed number(s). Cancel or complete it first.`
+      );
+      err.status = 400;
+      throw err;
+    }
+
+    // Clean up child numbers and draw records before deleting the game
+    await Draw.destroy({ where: { gameId: numericId }, transaction: t });
+    await GameNumber.destroy({ where: { gameId: numericId }, transaction: t });
+    await game.destroy({ transaction: t });
+
+    await t.commit();
+    return true;
+  } catch (err) {
+    if (!t.finished) await t.rollback();
+    throw err;
+  }
+}
 }
 
 module.exports = new GameService();

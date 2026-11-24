@@ -77,8 +77,27 @@ class GameController {
       return res.json(result);
     } catch (err) {
       next(err);
-    }
+    } 
   }
+  async updateGame(req, res, next) {
+  try {
+    const updated = await gameService.updateGame(req.params.id, req.body);
+    return res.status(200).json(updated);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    next(err);
+  }
+}
+
+async deleteGame(req, res, next) {
+  try {
+    await gameService.deleteGame(req.params.id);
+    return res.status(200).json({ success: true, message: 'Game deleted.' });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    next(err);
+  }
+}
 }
 
 module.exports = new GameController();

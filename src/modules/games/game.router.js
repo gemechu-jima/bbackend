@@ -11,7 +11,14 @@ router.patch('/:id/close', authenticate, requireRole('ADMIN'), (req, res, next) 
 router.patch('/:id/cancel', authenticate, requireRole('ADMIN'), (req, res, next) => gameController.cancel(req, res, next));
 router.patch('/:id/pending', authenticate, requireRole('ADMIN'), (req, res, next) => gameController.pending(req, res, next));
 router.patch('/:id/drawing', authenticate, requireRole('ADMIN'), (req, res, next) => gameController.drawing(req, res, next));
-router.delete('/:id', authenticate, requireRole('ADMIN'), (req, res, next) => gameController.delete(req, res, next));
+// router.delete('/:id', authenticate, requireRole('ADMIN'), (req, res, next) => gameController.delete(req, res, next));
+router.patch('/:id', authenticate, requireRole('ADMIN'), (req, res, next) =>
+  gameController.updateGame(req, res, next)
+);
+
+router.delete('/:id', authenticate, requireRole('ADMIN'), (req, res, next) =>
+  gameController.deleteGame(req, res, next)
+);
 
 module.exports = router;
 

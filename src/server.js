@@ -12,6 +12,7 @@ const numberRouter = require('./modules/numbers/number.router');
 const paymentRouter = require('./modules/payments/payment.router');
 const drawRouter = require('./modules/draws/draw.router');
 const notificationRouter = require('./modules/notifications/notification.router');
+const settingRouter = require('./modules/setting/setting.router');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,6 +62,7 @@ function registerRoutes(prefix) {
   app.use(`${prefix}/payments`, paymentRouter);
   app.use(`${prefix}/draws`, drawRouter);
   app.use(`${prefix}/notifications`, notificationRouter);
+  app.use(`${prefix}/settings`, settingRouter);
 }
 
 // Mount on /api and /api/v1
@@ -74,7 +76,7 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     documentation: 'Mounting modular endpoints on /api and /api/v1',
     dialect: process.env.DB_DIALECT || 'mysql',
-    modules: ['users', 'games', 'numbers', 'payments', 'draws', 'audit'],
+    modules: ['users', 'games', 'numbers', 'payments', 'draws', 'notifications', 'settings', 'audit'],
   });
 });
 
