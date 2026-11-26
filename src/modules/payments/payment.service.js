@@ -145,7 +145,7 @@ class PaymentService {
       }
     }
 
-    // Prefer permanent cloud storage URL (e.g. ImageKit) if provided; fallback to local disk upload
+    // Prefer permanent cloud storage URL (e.g. Cloudinary) if provided; fallback to local disk upload
     let proofUrl = providedProofUrl || null;
     if (!proofUrl && file) {
       const env = require('../../config/env');
@@ -260,6 +260,15 @@ class PaymentService {
 
       await t.commit();
 
+      if (targetId) {
+        const { broadcastNumberUpdate } = require('../../utils/realtime');
+        broadcastNumberUpdate({
+          gameId: proof.gameId,
+          numberId: targetId,
+          status: 'CONFIRMED',
+        });
+      }
+
       try {
         const notificationService = require('../notifications/notification.service');
         const gNum = targetId ? await GameNumber.findByPk(targetId) : null;
@@ -320,6 +329,15 @@ class PaymentService {
       }
 
       await t.commit();
+
+      if (targetId) {
+        const { broadcastNumberUpdate } = require('../../utils/realtime');
+        broadcastNumberUpdate({
+          gameId: proof.gameId,
+          numberId: targetId,
+          status: 'CONFIRMED',
+        });
+      }
 
       try {
         const notificationService = require('../notifications/notification.service');

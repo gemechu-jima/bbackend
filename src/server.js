@@ -1,10 +1,11 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const path = require('path');
 const { sequelize } = require('./modules');
 const { startExpiryCron } = require('./tasks/expiry.task');
-const ImageKit = require('imagekit');
+const { initRealtime } = require('./utils/realtime');
 // Import modular routers
 const userRouter = require('./modules/users/user.router');
 const gameRouter = require('./modules/games/game.router');
@@ -27,24 +28,8 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
-});
 // Serve uploaded payment screenshots statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-// ImageKit authentication endpoint for client-side uploads
-const handleImageKitAuth = (req, res) => {
-  try {
-    const authParams = imagekit.getAuthenticationParameters();
-    return res.status(200).json(authParams);
-  } catch (err) {
-    return res.status(500).json({ message: 'ImageKit auth failed', error: err.message });
-  }
-};
-app.get('/api/imagekit-auth', handleImageKitAuth);
-app.get('/api/v1/imagekit-auth', handleImageKitAuth);
 // Health check
 app.get('/health', (req, res) => {
   res.json({

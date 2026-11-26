@@ -5,6 +5,7 @@ const sequelize = require('../config/database');
 const Game = require('../modules/games/game.model');
 const Draw = require('../modules/draws/draw.model');
 const Payment = require('../modules/payments/payment.model');
+const { broadcastNumbersRefresh } = require('../utils/realtime');
 function startExpiryCron() {
   console.log('⏱️ Reservation expiry worker started (monitoring every 30s)...');
 
@@ -29,6 +30,7 @@ function startExpiryCron() {
 
       if (releasedCount > 0) {
         console.log(`⏳ Auto-expired ${releasedCount} reservation(s). Released numbers back to AVAILABLE.`);
+        broadcastNumbersRefresh();
       }
     } catch (err) {
       console.error('Error in reservation expiry worker:', err);

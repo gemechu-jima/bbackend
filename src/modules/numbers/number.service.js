@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const GameNumber = require('./number.model');
 const Game = require('../games/game.model');
 const User = require('../users/user.model');
+const PaymentProof = require('../payments/payment.model');
 const { sequelize } = require('../../config/database');
 
 function formatNumberItem(item, gameTitle = null) {
@@ -188,50 +189,95 @@ class NumberService {
     return list.map((item) => formatNumberItem(item));
   }
 
-  async confirm(id, adminId = null) {
-    const gameNumber = await GameNumber.findByPk(id, {
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'phoneNumber'] },
-        { model: Game, as: 'game', attributes: ['id', 'title'] },
-      ],
-    });
-
-    if (!gameNumber) {
-      const error = new Error('Number not found');
-      error.status = 404;
-      throw error;
+  async syncPendingPaymentProofs(numberId, status, adminId, reviewNote, transaction) {
+    const updateData = {
+      status,
+      reviewedBy: adminId || null,
+      reviewedAt: new Date(),
+    };
+    if (reviewNote) {
+      updateData.reviewNote = reviewNote;
     }
 
-    gameNumber.status = 'CONFIRMED';
-    gameNumber.confirmedById = adminId || gameNumber.confirmedById;
-    await gameNumber.save();
+    await PaymentProof.update(updateData, {
+      where: {
+        [Op.or]: [{ numberId }, { reservationId: numberId }],
+        status: { [Op.in]: ['SUBMITTED', 'UNDER_REVIEW'] },
+      },
+      transaction,
+    });
+  }
 
-    return formatNumberItem(gameNumber);
+  async confirm(id, adminId = null) {
+    const t = await sequelize.transaction();
+    try {
+      const gameNumber = await GameNumber.findByPk(id, {
+        include: [
+          { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'phoneNumber'] },
+          { model: Game, as: 'game', attributes: ['id', 'title'] },
+        ],
+        transaction: t,
+      });
+
+      if (!gameNumber) {
+        const error = new Error('Number not found');
+        error.status = 404;
+        throw error;
+      }
+
+      gameNumber.status = 'CONFIRMED';
+      gameNumber.confirmedById = adminId || gameNumber.confirmedById;
+      await gameNumber.save({ transaction: t });
+
+      await this.syncPendingPaymentProofs(gameNumber.id, 'VERIFIED', adminId, null, t);
+
+      await t.commit();
+      return formatNumberItem(gameNumber);
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
   }
 
   async cancel(id, adminId = null) {
-    const gameNumber = await GameNumber.findByPk(id, {
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'phoneNumber'] },
-        { model: Game, as: 'game', attributes: ['id', 'title'] },
-      ],
-    });
+    const t = await sequelize.transaction();
+    try {
+      const gameNumber = await GameNumber.findByPk(id, {
+        include: [
+          { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'phoneNumber'] },
+          { model: Game, as: 'game', attributes: ['id', 'title'] },
+        ],
+        transaction: t,
+      });
 
-    if (!gameNumber) {
-      const error = new Error('Number not found');
-      error.status = 404;
-      throw error;
+      if (!gameNumber) {
+        const error = new Error('Number not found');
+        error.status = 404;
+        throw error;
+      }
+
+      gameNumber.status = 'AVAILABLE';
+      gameNumber.userId = null;
+      gameNumber.expiresAt = null;
+      // Record which admin released the number (if admin-initiated)
+      if (adminId) gameNumber.confirmedById = adminId;
+      await gameNumber.save({ transaction: t });
+
+      await this.syncPendingPaymentProofs(
+        gameNumber.id,
+        'REJECTED',
+        adminId,
+        'Reservation cancelled / rejected by administrator',
+        t
+      );
+
+      await t.commit();
+      // Build response AFTER save so confirmedById is included
+      return formatNumberItem(gameNumber);
+    } catch (err) {
+      await t.rollback();
+      throw err;
     }
-
-    gameNumber.status = 'AVAILABLE';
-    gameNumber.userId = null;
-    gameNumber.expiresAt = null;
-    // Record which admin released the number (if admin-initiated)
-    if (adminId) gameNumber.confirmedById = adminId;
-    await gameNumber.save();
-
-    // Build response AFTER save so confirmedById is included
-    return formatNumberItem(gameNumber);
   }
 
   async restore(id) {
