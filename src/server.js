@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const { sequelize } = require('./modules');
 const { startExpiryCron } = require('./tasks/expiry.task');
+const { startKeepAlive } = require('./tasks/keepAlive.task');
 const { initRealtime } = require('./utils/realtime');
 // Import modular routers
 const userRouter = require('./modules/users/user.router');
@@ -87,8 +88,12 @@ async function startServer() {
 
     // Start background reservation expiration monitor
     startExpiryCron();
+    startKeepAlive();
 
-    app.listen(PORT, HOST, () => {
+    const httpServer = http.createServer(app);
+    initRealtime(httpServer);
+
+    httpServer.listen(PORT, HOST, () => {
       console.log(`🚀 Bingo Backend Server running on:`);
       console.log(`   - Local:   http://localhost:${PORT}`);
       console.log(`   - Network: http://${HOST}:${PORT}`);
